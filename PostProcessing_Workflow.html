@@ -1,0 +1,2018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Post Processing Workflow</title>
+  <style>
+    /* ── Colour tokens ── */
+    :root {
+      --blue:        #3b82f6;
+      --blue-dark:   #1d4ed8;
+      --purple:      #8b5cf6;
+      --purple-dark: #6d28d9;
+      --ashy:        #94a3b8;
+    }
+
+    /* ── Dark mode ── */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg:           #0f172a;
+        --surface:      #1e293b;
+        --surface2:     #273549;
+        --text:         #e2e8f0;
+        --text-muted:   #94a3b8;
+        --border:       #334155;
+        --highlight-bg: #1e3a5f;
+        --warn-bg:      #2d1b00;
+        --warn-border:  #f59e0b;
+        --warn-text:    #fbbf24;
+        --info-bg:      #0c2540;
+        --info-border:  #3b82f6;
+        --info-text:    #93c5fd;
+        --code-bg:      #0d1117;
+        --dot-border:   #0f172a;
+        --shadow:       rgba(0,0,0,0.4);
+      }
+    }
+
+    /* ── Light mode ── */
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg:           #f0f4f8;
+        --surface:      #ffffff;
+        --surface2:     #e8edf4;
+        --text:         #1e293b;
+        --text-muted:   #64748b;
+        --border:       #cbd5e1;
+        --highlight-bg: #dbeafe;
+        --warn-bg:      #fffbeb;
+        --warn-border:  #f59e0b;
+        --warn-text:    #92400e;
+        --info-bg:      #eff6ff;
+        --info-border:  #3b82f6;
+        --info-text:    #1e40af;
+        --code-bg:      #f8fafc;
+        --dot-border:   #f0f4f8;
+        --shadow:       rgba(0,0,0,0.12);
+      }
+    }
+
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ════════════════════════════
+       HEADER
+    ════════════════════════════ */
+    .header {
+      background: linear-gradient(135deg, var(--blue-dark) 0%, var(--purple-dark) 100%);
+      padding: 18px 28px 14px;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .header h1 { font-size: 1.55rem; letter-spacing: 0.3px; }
+    .header p  { font-size: 0.88rem; opacity: 0.82; margin-top: 3px; }
+
+    /* ════════════════════════════
+       PERSISTENT TERMINATE BANNER
+    ════════════════════════════ */
+    .terminate-banner {
+      background: var(--warn-bg);
+      border-bottom: 1px solid var(--warn-border);
+      color: var(--warn-text);
+      padding: 8px 28px;
+      font-size: 0.88rem;
+      text-align: center;
+      flex-shrink: 0;
+      font-weight: bold;
+      letter-spacing: 0.2px;
+    }
+    .terminate-banner code {
+      background: rgba(0,0,0,0.15);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+      color: inherit;
+    }
+
+    /* ════════════════════════════
+       TAB NAV
+    ════════════════════════════ */
+    .tab-nav {
+      display: flex;
+      background: var(--surface);
+      border-bottom: 2px solid var(--border);
+      padding: 0 28px;
+      flex-shrink: 0;
+    }
+    .tab-btn {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 1rem;
+      font-weight: bold;
+      padding: 12px 26px;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: color 0.2s, border-color 0.2s;
+      letter-spacing: 0.3px;
+    }
+    .tab-btn:hover { color: var(--blue); }
+    .tab-btn.active { color: var(--blue); border-bottom-color: var(--purple); }
+
+    /* ════════════════════════════
+       MAIN LAYOUT
+    ════════════════════════════ */
+    .main-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ════════════════════════════
+       SIDE NAV
+    ════════════════════════════ */
+    .side-nav {
+      width: 230px;
+      min-width: 230px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 18px 0 18px;
+      flex-shrink: 0;
+    }
+    .side-nav-title {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--ashy);
+      padding: 0 14px 10px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 14px;
+      cursor: pointer;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      border-left: 3px solid transparent;
+      transition: all 0.18s;
+      line-height: 1.3;
+    }
+    .nav-item:hover { background: var(--surface2); color: var(--text); }
+    .nav-item.active {
+      border-left-color: var(--purple);
+      color: var(--blue);
+      background: var(--highlight-bg);
+      font-weight: bold;
+    }
+    .nav-num {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: #fff;
+      font-size: 0.72rem;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+    .nav-item.active .nav-num { background: var(--purple); }
+    .nav-sub { font-size: 0.72rem; color: var(--ashy); margin-top: 2px; }
+
+    /* ════════════════════════════
+       CONTENT AREA
+    ════════════════════════════ */
+    .content-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 30px 40px 60px;
+    }
+
+    /* ════════════════════════════
+       TAB PANELS
+    ════════════════════════════ */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .tab-intro {
+      background: var(--info-bg);
+      border-left: 4px solid var(--info-border);
+      padding: 12px 16px;
+      border-radius: 6px;
+      margin-bottom: 26px;
+      color: var(--info-text);
+      font-size: 0.92rem;
+      line-height: 1.55;
+    }
+    .tab-intro strong { color: var(--info-text); }
+
+    /* ════════════════════════════
+       TIMELINE
+    ════════════════════════════ */
+    .timeline {
+      position: relative;
+      padding-left: 44px;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 14px; top: 10px; bottom: 10px;
+      width: 3px;
+      background: linear-gradient(to bottom, var(--blue), var(--purple));
+      border-radius: 3px;
+    }
+    .timeline-step { position: relative; margin-bottom: 22px; }
+    .step-dot {
+      position: absolute;
+      left: -36px; top: 18px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--blue);
+      border: 3px solid var(--dot-border);
+      box-shadow: 0 0 0 2px var(--blue);
+      transition: all 0.25s;
+    }
+    .timeline-step.highlighted .step-dot {
+      background: var(--purple);
+      box-shadow: 0 0 0 3px var(--purple), 0 0 14px var(--purple);
+      transform: scale(1.25);
+    }
+
+    /* ── Step card ── */
+    .step-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 15px 18px;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    }
+    .step-card:hover {
+      border-color: var(--blue);
+      box-shadow: 0 2px 14px rgba(59,130,246,0.15);
+    }
+    .timeline-step.highlighted .step-card {
+      border-color: var(--purple);
+      box-shadow: 0 4px 22px rgba(139,92,246,0.28);
+      background: var(--highlight-bg);
+    }
+    .step-header {
+      display: flex; align-items: center;
+      justify-content: space-between; gap: 10px;
+    }
+    .step-title {
+      font-size: 1.05rem;
+      font-weight: bold;
+      color: var(--blue);
+    }
+    .step-badge {
+      font-size: 0.72rem;
+      background: linear-gradient(135deg, var(--blue), var(--purple));
+      color: #fff;
+      padding: 2px 9px;
+      border-radius: 12px;
+      white-space: nowrap;
+    }
+    .step-desc {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-top: 6px;
+      line-height: 1.6;
+    }
+    .step-desc ul { margin: 6px 0 0 18px; }
+    .step-desc li { margin-bottom: 3px; }
+    .step-desc code, .step-card code {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+      color: var(--text);
+    }
+
+    /* ── Warning box ── */
+    .warning-box {
+      display: flex;
+      gap: 9px;
+      align-items: flex-start;
+      margin-top: 11px;
+      padding: 10px 13px;
+      background: var(--warn-bg);
+      border: 1.5px solid var(--warn-border);
+      border-radius: 8px;
+    }
+    .warn-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+    .warn-text {
+      font-size: 0.86rem;
+      color: var(--warn-text);
+      line-height: 1.55;
+    }
+    .warn-text code {
+      background: rgba(0,0,0,0.15);
+      border: none;
+      color: inherit;
+    }
+
+    /* ── Info box ── */
+    .info-box {
+      display: flex;
+      gap: 9px;
+      align-items: flex-start;
+      margin-top: 11px;
+      padding: 10px 13px;
+      background: var(--info-bg);
+      border: 1.5px solid var(--info-border);
+      border-radius: 8px;
+    }
+    .info-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+    .info-text {
+      font-size: 0.86rem;
+      color: var(--info-text);
+      line-height: 1.55;
+    }
+    .info-text code {
+      background: rgba(0,0,0,0.15);
+      border: none;
+      color: inherit;
+    }
+
+    /* ── Code block ── */
+    .code-block {
+      margin-top: 12px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 12px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+    .code-label {
+      font-size: 0.74rem;
+      color: var(--ashy);
+      font-family: 'Courier New', monospace;
+    }
+    .copy-btn {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 0.74rem;
+      padding: 3px 10px;
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .copy-btn:hover  { background: var(--purple); }
+    .copy-btn.copied { background: #10b981; }
+    .code-content {
+      padding: 12px 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.84rem;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-all;
+      overflow-x: auto;
+      line-height: 1.6;
+    }
+
+    /* ════════════════════════════
+       REDO TAB sub-sections
+    ════════════════════════════ */
+    .redo-section { margin-bottom: 44px; }
+    .redo-section-title {
+      font-size: 1.15rem;
+      font-weight: bold;
+      color: var(--purple);
+      border-bottom: 2px solid var(--purple);
+      padding-bottom: 8px;
+      margin-bottom: 22px;
+    }
+
+    /* ════════════════════════════
+       CHATBOT
+    ════════════════════════════ */
+    .chatbot-toggle {
+      position: fixed;
+      bottom: 26px; right: 26px;
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--blue), var(--purple));
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-size: 1.4rem;
+      box-shadow: 0 4px 18px rgba(59,130,246,0.45);
+      z-index: 200;
+      transition: transform 0.2s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .chatbot-toggle:hover { transform: scale(1.1); }
+
+    .chatbot-panel {
+      position: fixed;
+      bottom: 88px; right: 26px;
+      width: 360px; height: 500px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 8px 36px var(--shadow);
+      display: none;
+      flex-direction: column;
+      z-index: 199;
+      overflow: hidden;
+    }
+    .chatbot-panel.open { display: flex; }
+
+    .chat-header {
+      padding: 13px 16px;
+      background: linear-gradient(135deg, var(--blue-dark), var(--purple-dark));
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+    .chat-header p {
+      font-size: 0.76rem;
+      opacity: 0.8;
+      font-weight: normal;
+      margin-top: 2px;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+    .chat-msg {
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 0.86rem;
+      line-height: 1.55;
+      max-width: 92%;
+      white-space: pre-wrap;
+    }
+    .chat-msg.bot {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      align-self: flex-start;
+    }
+    .chat-msg.user {
+      background: var(--blue);
+      color: #fff;
+      align-self: flex-end;
+    }
+    .chat-msg code {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+    }
+
+    .chat-suggestions {
+      padding: 6px 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .suggestion-chip {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 0.74rem;
+      padding: 3px 9px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all 0.15s;
+    }
+    .suggestion-chip:hover { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+    .chat-input-area {
+      display: flex;
+      padding: 9px 10px;
+      gap: 7px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .chat-input {
+      flex: 1;
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 0.86rem;
+      padding: 7px 11px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+    }
+    .chat-input:focus { border-color: var(--blue); }
+    .chat-send {
+      font-family: 'Times New Roman', Times, serif;
+      padding: 7px 13px;
+      background: var(--purple);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.86rem;
+      transition: background 0.2s;
+    }
+    .chat-send:hover { background: var(--blue); }
+
+    /* ════════════════════════════
+       WARNING SNIPPET BUTTON & MODAL
+    ════════════════════════════ */
+    .snippet-btn {
+      position: fixed;
+      bottom: 26px; right: 88px;
+      padding: 9px 14px;
+      background: var(--surface);
+      border: 2px solid var(--warn-border);
+      color: var(--warn-text);
+      border-radius: 10px;
+      cursor: pointer;
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 0.82rem;
+      font-weight: bold;
+      box-shadow: 0 2px 10px var(--shadow);
+      z-index: 200;
+      transition: background 0.2s;
+    }
+    .snippet-btn:hover { background: var(--warn-bg); }
+
+    .modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 300;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--surface);
+      border-radius: 13px;
+      padding: 26px 28px;
+      width: 580px; max-width: 92vw;
+      box-shadow: 0 10px 44px var(--shadow);
+      position: relative;
+    }
+    .modal-close {
+      position: absolute; top: 14px; right: 16px;
+      background: none; border: none;
+      font-size: 1.3rem; cursor: pointer;
+      color: var(--text-muted);
+      line-height: 1;
+    }
+    .modal-close:hover { color: var(--text); }
+    .modal-box h3 { font-size: 1.1rem; color: var(--blue); margin-bottom: 5px; }
+    .modal-box > p { font-size: 0.86rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
+    .snippet-preview {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    .snippet-preview .code-header { padding: 5px 12px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+    .snippet-preview pre {
+      padding: 13px 16px;
+      font-size: 0.82rem;
+      font-family: 'Courier New', monospace;
+      color: var(--text);
+      white-space: pre;
+      overflow-x: auto;
+      line-height: 1.6;
+    }
+    .modal-note {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 10px;
+      line-height: 1.5;
+    }
+    .modal-note strong { color: var(--blue); }
+  </style>
+</head>
+<body>
+
+<!-- ════ HEADER ════ -->
+<div class="header">
+  <h1>Post Processing Workflow</h1>
+  <p>Data Services Team — Interactive Step-by-Step Guide  •  Train (ROI) &nbsp;|&nbsp;  Test (Annotation) &nbsp;|&nbsp;  Redo</p>
+</div>
+
+<!-- ════ PERSISTENT END-OF-DAY REMINDER ════ -->
+<div class="terminate-banner">
+  ⚠️ ALWAYS TERMINATE YOUR INSTANCE AT THE END OF EVERY DAY — open the launcher window, press <code>q</code>, then <code>1</code> to confirm.
+</div>
+
+<!-- ════ TAB NAV ════ -->
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('train', this)">🔵 Train (ROI)</button>
+  <button class="tab-btn"        onclick="switchTab('test',  this)">🟣 Test (Annotation)</button>
+  <button class="tab-btn"        onclick="switchTab('redo',  this)">🔄 Redo</button>
+</div>
+
+<!-- ════ MAIN LAYOUT ════ -->
+<div class="main-layout">
+
+  <!-- ── SIDE NAV ── -->
+  <nav class="side-nav" id="sideNav">
+    <div class="side-nav-title">Jump to Step</div>
+    <!-- filled dynamically by JS -->
+  </nav>
+
+  <!-- ── CONTENT AREA ── -->
+  <div class="content-area" id="contentArea">
+
+    <!-- ══════════════════════
+         TRAIN TAB  (ROI workflow on train data)
+    ══════════════════════ -->
+    <div class="tab-panel active" id="panel-train">
+
+      <div class="tab-intro">
+        <strong>Train workflow — ROI processing.</strong> Use this tab when post-processing scans where <code>testplan.scan_mode = train</code>. Output goes to <code>/mnt/ppo-data-services/post-processing/roi/</code>. Each step below maps to one spreadsheet column on the Date Page.<br/><br/>
+        <strong>Recommended run order:</strong>
+        <code>pproc</code> (DATA PREP) → <code>revt</code> (VIS REV) → vis QC (VIS EXTRACT-PNG) → <code>revt --spec</code> (SPEC REV) → spec QC (SPEC EXTRACT-PNG) → <code>awscp</code> (UPLOAD — covers both VIS UPLOAD and SPEC UPLOAD).<br/><br/>
+        <strong>Note:</strong> ROI review does <em>not</em> require <code>--make_extracts</code>. Reject criteria differ from annotations — see the VIS / SPEC EXTRACT-PNG steps (belt, clearance, FO of interest).
+      </div>
+
+      <div class="timeline" id="timeline-train">
+
+        <!-- STEP 1: Start Instance -->
+        <div class="timeline-step" id="train-step-1">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">1. Launch AWS Instance</span>
+              <span class="step-badge">Train · ROI</span>
+            </div>
+            <p class="step-desc">Double-click the launcher icon, or run the launcher script from the command line. To reconnect to an existing instance, just run the launcher again. To terminate, go to the launcher window, press <code>q</code> to quit and then <code>1</code> to confirm.</p>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>ALWAYS TERMINATE YOUR INSTANCE AT THE END OF EVERY DAY.</strong> Idle AWS instances cost money. When terminating, all data on the computer is deleted unless it is in an S3 bucket (<code>/mnt/&lt;bucket_name&gt;</code>) or your persistent volume (<code>~/volume/&lt;volume_name&gt;</code>).</span>
+            </div>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><strong>First-time setup only:</strong> follow the AWS Setup Instructions doc before running the launcher for the first time.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">launcher</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">Downloads\ds-ec2-launcher.cmd</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 2: MobaX -->
+        <div class="timeline-step" id="train-step-2">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">2. Connect via MobaX</span>
+              <span class="step-badge">Train · ROI</span>
+            </div>
+            <p class="step-desc">Open MobaXterm and connect to <strong>localhost port 5902</strong> with password <code>ppoadmin</code>. Once connected, open a new terminal in the VNC.</p>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>Before running any tool, type <code>aa;caf</code> in the terminal.</strong> If you see <code>No module named 'cv2'</code> or similar import errors, you forgot this step. The prompt should change to show <code>(full)</code> after running it.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">connect to instance</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">localhost:5902
+password: ppoadmin</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">activate environment</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">aa;caf</div>
+            </div>
+          </div>
+        </div>
+
+<!-- STEP 3 — Pre-flight count check -->
+        <div class="timeline-step" id="train-step-3">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">3. Pre-flight — verify file count</span>
+              <span class="step-badge">Optional · Sanity Check</span>
+            </div>
+            <p class="step-desc">Confirm the number of raw <code>train</code> files matches the spreadsheet before prepping. Same idea as the t3st pre-flight, just with <code>scan_mode train</code>.</p>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>If the count is 0:</strong> check material spelling, asterisks, and the directory. If files are still named <code>frame*</code> instead of <code>train*</code>, renaming hasn't completed yet — software needs more time.</span>
+            </div>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text">Never <code>cd</code> into an S3 bucket — it causes a major slowdown for every command you run. Always pass full paths.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">template — count train files</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">dl ls /mnt/ppo-experimental-data/&lt;PROJECT&gt;/fo/&lt;dm#&gt;_vis/&lt;date&gt;/raw/run* --filter testplan.mat &lt;material&gt; --filter testplan.scan_mode train --bare | wc -l</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 4 — AB DATA PREP (train / ROI) -->
+        <div class="timeline-step" id="train-step-4">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">4. DATA PREP <span style="font-weight:normal;color:var(--text-muted);font-size:0.9rem;">(also DATA PREPer)</span></span>
+              <span class="step-badge">pproc</span>
+            </div>
+            <p class="step-desc">Run <code>pproc</code> on the <code>train</code> raw files. The tool detects ROI squares and writes corrected files plus a <code>post_proc_info_&lt;#&gt;.txt</code> manifest under the <code>roi</code> output folder. Run per material, per dm, per date.</p>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><strong>Spreadsheet:</strong> tick <strong>DATA PREP</strong> when this finishes; put your name in <strong>DATA PREPer</strong>. Output: <code>/mnt/ppo-data-services/post-processing/roi/&lt;date&gt;/&lt;vis_camera_serial&gt;/</code>. Use <code>--save_dir</code> to override the destination.</span>
+            </div>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>Sweeper Path / cal_vis errors</strong> mean calibrations are missing or unmounted. Run <code>mount | grep PPO</code> to verify, then <code>mount&lt;#&gt;</code> with password <code>ppoadmin</code> if needed. If calibrations themselves aren't ready, escalate to software (Barrett).</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">template — pproc train</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">pproc `dl ls /mnt/ppo-experimental-data/&lt;PROJECT&gt;/fo/&lt;dm#&gt;_vis/&lt;date&gt;/raw/run*/frame*.h5 --filter testplan.mat &lt;material&gt; --filter testplan.scan_mode train -b`</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">find the manifest filename</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">ls /mnt/ppo-data-services/post-processing/roi/&lt;date&gt;/&lt;vis_camera_serial&gt;/post_proc_info_*.txt</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 5 — AD VIS REV -->
+        <div class="timeline-step" id="train-step-5">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">5. VIS REV <span style="font-weight:normal;color:var(--text-muted);font-size:0.9rem;">(also REVer · VIS IGNORE)</span></span>
+              <span class="step-badge">revt</span>
+            </div>
+            <p class="step-desc">Run <code>revt</code> on the manifest from the DATA PREP step to review the <strong>vis</strong> ROI masks. Page through and flag bad ones.</p>
+            <p class="step-desc"><strong>ROI review controls:</strong></p>
+            <ul class="step-desc" style="margin-top:0;">
+              <li><strong>Left click</strong> on a mask to highlight <strong>blue</strong> = mark for redo. Click again to remove.</li>
+              <li><strong>Right click</strong> to highlight <strong>red</strong> = mark scan un-usable, do not upload (this populates the <strong>VIS IGNORE</strong> column).</li>
+              <li>Use Next / Previous or arrow keys to navigate.</li>
+              <li>Press <code>q</code> to save, <code>!</code> to discard.</li>
+            </ul>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>If the review window won't open</strong> (<code>Could not connect to display</code>, <code>qxcbconnection</code>, or silent no-window), it's a tmux issue. Detach with <code>Ctrl+B</code> then <code>D</code>, kill the tmux, re-make it, and try again. Cause is usually the same tmux session open on two machines.</span>
+            </div>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><strong>Spreadsheet:</strong> tick <strong>VIS REV</strong> and put your name in <strong>REVer</strong> (vis side). <strong>VIS IGNORE</strong> is set automatically by your right-clicks. ROI review does <em>not</em> use <code>--make_extracts</code>.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">template — revt vis</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">revt /mnt/ppo-data-services/post-processing/roi/post_proc_info_&lt;#&gt;.txt</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 6 — AF VIS EXTRACT-PNG QC -->
+        <div class="timeline-step" id="train-step-6">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">6. VIS EXTRACT-PNG <span style="font-weight:normal;color:var(--text-muted);font-size:0.9rem;">(also VIS EXTRACT-PNGer)</span></span>
+              <span class="step-badge">eog / vexp</span>
+            </div>
+            <p class="step-desc">Visual QC of the vis ROI PNGs. Separate step from VIS REV — review = clicking through masks, QC = looking at the actual output.</p>
+            <ul class="step-desc" style="margin-top:0;">
+              <li><code>eog *.png</code> — quick browse through all PNGs.</li>
+              <li><code>vexp &lt;file&gt;.h5</code> — opens the .h5 directly when the PNG mask overlay obscures detail.</li>
+            </ul>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>Reject any ROI that contains:</strong> belt, other FOs that are not the FO of interest, or has too much clearance between the ROI box (yellow) and the ROI square (green) — that's data loss. For density ROIs, meat background is OK as long as FO density is uniform. Don't forget the <code>--ac</code> tag for spec annotations where required.</span>
+            </div>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><strong>Spreadsheet:</strong> tick <strong>VIS EXTRACT-PNG</strong>; name in <strong>VIS EXTRACT-PNGer</strong>. To fix: go back to VIS REV, mark the scan blue, and use vroi (Train Redo) to re-ROI.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">browse PNGs (vis camera)</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">eog /mnt/ppo-data-services/post-processing/roi/&lt;date&gt;/&lt;vis_camera_serial&gt;/*.png</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">open one .h5 in vexp</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">vexp /mnt/ppo-data-services/post-processing/roi/&lt;date&gt;/&lt;vis_camera_serial&gt;/&lt;file&gt;.h5</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 7 — AK SPEC REV -->
+        <div class="timeline-step" id="train-step-7">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">7. SPEC REV <span style="font-weight:normal;color:var(--text-muted);font-size:0.9rem;">(also REVer · SPEC IGNORE)</span></span>
+              <span class="step-badge">revt --spec</span>
+            </div>
+            <p class="step-desc">Re-run <code>revt</code> with <code>--spec</code> to sanity-check the spec ROI masks. Same controls as VIS REV.</p>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><strong>Spreadsheet:</strong> tick <strong>SPEC REV</strong>; name in <strong>REVer</strong> (spec side). Right-clicks here populate <strong>SPEC IGNORE</strong>. Run AFTER VIS REV.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">template — revt --spec</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">revt /mnt/ppo-data-services/post-processing/roi/post_proc_info_&lt;#&gt;.txt --spec</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 8 — AM SPEC EXTRACT-PNG QC -->
+        <div class="timeline-step" id="train-step-8">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">8. SPEC EXTRACT-PNG <span style="font-weight:normal;color:var(--text-muted);font-size:0.9rem;">(also SPEC EXTRACT-PNGer)</span></span>
+              <span class="step-badge">eog / hexp</span>
+            </div>
+            <p class="step-desc">Same QC as VIS EXTRACT-PNG, but for spec ROIs. Note the path uses the <strong>spec camera serial</strong>. Use <code>hexp</code> instead of <code>vexp</code> for the .h5 files.</p>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>Same reject criteria as VIS EXTRACT-PNG:</strong> no belt, no other (non-target) FOs, sufficient clearance between ROI box and square. To fix, mark blue in SPEC REV and re-ROI via Redo.</span>
+            </div>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><strong>Spreadsheet:</strong> tick <strong>SPEC EXTRACT-PNG</strong>; name in <strong>SPEC EXTRACT-PNGer</strong>.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">browse PNGs (spec camera)</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">eog /mnt/ppo-data-services/post-processing/roi/&lt;date&gt;/&lt;spec_camera_serial&gt;/*.png</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">open one .h5 in hexp</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">hexp /mnt/ppo-data-services/post-processing/roi/&lt;date&gt;/&lt;spec_camera_serial&gt;/&lt;file&gt;.h5</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 9 — AH + AO UPLOAD -->
+        <div class="timeline-step" id="train-step-9">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">9. UPLOAD <span style="font-weight:normal;color:var(--text-muted);font-size:0.9rem;">(VIS UPLOAD + SPEC UPLOAD; UPLOADer)</span></span>
+              <span class="step-badge">awscp</span>
+            </div>
+            <p class="step-desc">Run <code>awscp</code> on the manifest. <strong>One run uploads BOTH vis and spec</strong> — the VIS UPLOAD and SPEC UPLOAD checkboxes are for independent verification of each side, not because you upload twice.</p>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><strong>Spreadsheet:</strong> tick <strong>VIS UPLOAD</strong> after the vis count check, and <strong>SPEC UPLOAD</strong> after the spec count check. Put your name in the <strong>UPLOADer</strong> dropdown for each side.</span>
+            </div>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong><code>No Such File or Directory</code> on upload</strong> means the .txt is looking for .h5s that have been moved or already uploaded. If just spec is missing, recovery is possible (Common PP Errors → Advanced Solutions). If vis is missing, re-prep is required.</span>
+            </div>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>Permissions error?</strong> Server is mounted read-only. Run <code>mount&lt;#&gt;w &lt;username&gt;</code> (needs rw permission). If you don't have it, ask Alan Rooks.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">awscp — uploads vis + spec together</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">awscp /mnt/ppo-data-services/post-processing/roi/post_proc_info_&lt;#&gt;.txt</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">verify VIS count (for VIS UPLOAD)</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">ls /mnt/ppo-post-proc/&lt;PROJECT&gt;/fo/&lt;dm#&gt;_vis/&lt;date&gt;/corrected | wc -l</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">verify SPEC count (for SPEC UPLOAD)</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">ls /mnt/ppo-post-proc/&lt;PROJECT&gt;/fo/&lt;dm#&gt;_spec/&lt;date&gt;/corrected | wc -l</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 10 — Redo flagged ROIs -->
+        <div class="timeline-step" id="train-step-10">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">10. Redo flagged ROIs (only if needed)</span>
+              <span class="step-badge">If a QC step fails</span>
+            </div>
+            <p class="step-desc">Only run if you marked any scans <strong>blue</strong> during VIS REV or SPEC REV. Run <code>vroi</code> on the same manifest — it opens only the blue-highlighted scans for re-ROI. After redo, re-run the EXTRACT-PNG QC steps to verify before uploading.</p>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><code>--df passthrough</code> uses the existing dataframe; <code>--t</code> transforms the new vis ROI to the spec image automatically. Files marked <strong>red</strong> in VIS REV / SPEC REV are excluded from upload — vroi does not re-open them.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">vroi — train redo</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">vroi /mnt/ppo-data-services/post-processing/roi/post_proc_info_&lt;#&gt;.txt --df passthrough --t</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /timeline-train -->
+    </div><!-- /panel-train -->
+
+
+    <!-- ══════════════════════
+         TEST TAB  (Annotation workflow on t3st data)
+    ══════════════════════ -->
+    <div class="tab-panel" id="panel-test">
+
+      <div class="tab-intro">
+        <strong>Test workflow — Annotation processing.</strong> Use this tab when post-processing scans where <code>testplan.scan_mode = t3st</code> (note the spelling: "t3st", not "test"). Output goes to <code>/mnt/ppo-data-services/post-processing/annotation/</code>. Each step below maps to one spreadsheet column on the Date Page.<br/><br/>
+        <strong>Recommended run order</strong> (more efficient than left-to-right on the spreadsheet):
+        <code>pproc</code> (DATA PREP) → <code>revt</code> (VIS REV) → vis QC (VIS EXTRACT-PNG) → <code>revt --spec</code> (SPEC REV) → spec QC (SPEC EXTRACT-PNG) → <code>awscp</code> (UPLOAD — one run covers both VIS UPLOAD and SPEC UPLOAD).<br/><br/>
+        <strong>Worked example below uses:</strong> Date <code>2026-04-25</code> · DM <code>dm21040002</code> · Material <code>concrete</code> · Vis cam <code>2104A1813</code> · Spec cam <code>13480</code>. Swap <code>concrete</code> for the actual material (e.g. <code>green_plastic</code>) per row.
+      </div>
+
+      <div class="timeline" id="timeline-test">
+
+        <!-- STEP 1 -->
+        <div class="timeline-step" id="test-step-1">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">1. Launch AWS Instance</span>
+              <span class="step-badge">Test · Annotation</span>
+            </div>
+            <p class="step-desc">Double-click the launcher icon, or run the launcher script from the command line. To reconnect to an existing instance, just run the launcher again. To terminate, go to the launcher window, press <code>q</code> to quit and then <code>1</code> to confirm.</p>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>ALWAYS TERMINATE YOUR INSTANCE AT THE END OF EVERY DAY.</strong> Anything not in an S3 bucket or persistent volume will be lost on termination.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">launcher</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">Downloads\ds-ec2-launcher.cmd</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 2 -->
+        <div class="timeline-step" id="test-step-2">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">2. Connect via MobaX</span>
+              <span class="step-badge">Test · Annotation</span>
+            </div>
+            <p class="step-desc">Open MobaXterm and connect to <strong>localhost port 5902</strong> with password <code>ppoadmin</code>. Once connected, open a new terminal in the VNC.</p>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>Type <code>aa;caf</code> before running any tool.</strong> Forgetting this is the most common cause of <code>No module named 'cv2'</code> errors when running <code>pproc</code>, <code>revt</code>, <code>vroi</code>, <code>vexp</code>, etc. The prompt should show <code>(full)</code> afterwards.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">connect to instance</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">localhost:5902
+password: ppoadmin</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">activate environment</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">aa;caf</div>
+            </div>
+          </div>
+        </div>
+
+<!-- STEP 3 — Pre-flight count check -->
+        <div class="timeline-step" id="test-step-3">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">3. Pre-flight — verify file count</span>
+              <span class="step-badge">Optional · Sanity Check</span>
+            </div>
+            <p class="step-desc">Before DATA PREP, confirm the number of raw <code>t3st</code> files for this material+date+dm matches the count on the spreadsheet. Catches typos and missing renames before you waste time on a long pproc run. Note the <code>scan_mode t3st</code> filter — using <code>test</code> here returns zero.</p>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>If the count is 0,</strong> check material spelling, asterisks, and the directory. If files are still named <code>frame*</code> instead of <code>t3st*</code>, renaming hasn't completed yet — software needs more time, or escalate.</span>
+            </div>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text">Run commands using full paths. Don't <code>cd</code> into <code>/mnt/ppo-experimental-data</code> or any S3 bucket — every command becomes much slower.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">template</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">dl ls /mnt/ppo-experimental-data/&lt;PROJECT&gt;/fo/&lt;dm#&gt;_vis/&lt;date&gt;/raw/run* --filter testplan.mat &lt;material&gt; --filter testplan.scan_mode t3st --bare | wc -l</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">example — concrete on 2026-04-25, dm21040002</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">dl ls /mnt/ppo-experimental-data/&lt;PROJECT&gt;/fo/dm21040002_vis/2026-04-25/raw/run* --filter testplan.mat concrete --filter testplan.scan_mode t3st --bare | wc -l</div>
+            </div>
+          </div>
+        </div>
+
+<!-- STEP 4 — AB DATA PREP -->
+        <div class="timeline-step" id="test-step-4">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">4. DATA PREP <span style="font-weight:normal;color:var(--text-muted);font-size:0.9rem;">(also DATA PREPer)</span></span>
+              <span class="step-badge">pproc</span>
+            </div>
+            <p class="step-desc">Run <code>pproc</code> on the <code>t3st</code> raw files. The tool detects FOs (foreign objects), draws annotation boxes, generates vis/spec PNGs, and writes a <code>post_proc_info_&lt;#&gt;.txt</code> manifest under the <code>annotation</code> output folder. After it finishes, list the manifest filename so you can use it in the review and upload steps.</p>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><strong>Spreadsheet:</strong> tick <strong>DATA PREP</strong> when this finishes; put your name in <strong>DATA PREPer</strong>. Output path: <code>/mnt/ppo-data-services/post-processing/annotation/&lt;date&gt;/&lt;vis_camera_serial&gt;/</code>. Add <code>--no_split</code> if your project doesn't split into validation/test extracts.</span>
+            </div>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>Make sure you are using <code>scan_mode t3st</code>, not <code>train</code>.</strong> Train scans go through the ROI workflow (Train tab); t3st scans go through Annotation (this tab). Mixing them produces wrong output and reviewer rework.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">template — pproc t3st</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">pproc `dl ls /mnt/ppo-experimental-data/&lt;PROJECT&gt;/fo/&lt;dm#&gt;_vis/&lt;date&gt;/raw/run*/frame*.h5 --filter testplan.mat &lt;material&gt; --filter testplan.scan_mode t3st -b`</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">example — concrete on 2026-04-25, dm21040002</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">pproc `dl ls /mnt/ppo-experimental-data/&lt;PROJECT&gt;/fo/dm21040002_vis/2026-04-25/raw/run*/frame*.h5 --filter testplan.mat concrete --filter testplan.scan_mode t3st -b`</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">find the manifest filename (post_proc_info_#.txt)</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">ls /mnt/ppo-data-services/post-processing/annotation/2026-04-25/2104A1813/post_proc_info_*.txt</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 5 — AD VIS REV -->
+        <div class="timeline-step" id="test-step-5">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">5. VIS REV <span style="font-weight:normal;color:var(--text-muted);font-size:0.9rem;">(also REVer · VIS IGNORE)</span></span>
+              <span class="step-badge">revt --make_extracts</span>
+            </div>
+            <p class="step-desc">Run <code>revt</code> on the manifest from the DATA PREP step to review the <strong>vis</strong> annotation masks. Step through every scan and edit annotation boxes as needed.</p>
+            <p class="step-desc"><strong>Annotation review controls:</strong></p>
+            <ul class="step-desc" style="margin-top:0;">
+              <li><strong>Left click</strong> empty area → <strong>add</strong> a red annotation box.</li>
+              <li><strong>Left click</strong> existing box → <strong>remove</strong> it.</li>
+              <li><strong>Right click</strong> a scan → mark <strong>red</strong> (un-usable, will not upload). This populates the <strong>VIS IGNORE</strong> column automatically.</li>
+              <li>Press <code>q</code> to save and exit, or <code>!</code> to exit without saving.</li>
+            </ul>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong><code>--make_extracts</code> is REQUIRED.</strong> Without it your edits save to the masks but no extract files are written, so the annotations don't reach the model. If you forgot, just re-run with <code>--make_extracts</code> appended.</span>
+            </div>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><strong>Spreadsheet:</strong> tick <strong>VIS REV</strong> when finished and put your name in <strong>REVer</strong> (vis side). <strong>VIS IGNORE</strong> is set automatically by your right-clicks — no separate action needed.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">template — revt vis</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">revt /mnt/ppo-data-services/post-processing/annotation/post_proc_info_&lt;#&gt;.txt --make_extracts</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 6 — AF VIS EXTRACT-PNG QC -->
+        <div class="timeline-step" id="test-step-6">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">6. VIS EXTRACT-PNG <span style="font-weight:normal;color:var(--text-muted);font-size:0.9rem;">(also VIS EXTRACT-PNGer)</span></span>
+              <span class="step-badge">eog / vexp</span>
+            </div>
+            <p class="step-desc">Visual QC of the vis extract PNGs. This is a <strong>separate step</strong> from VIS REV — the review step is clicking through masks; extract QC is looking at the actual output that will reach the model. Use whichever tool is faster:</p>
+            <ul class="step-desc" style="margin-top:0;">
+              <li><code>eog *.png</code> — quickest browse through all PNGs in the camera folder.</li>
+              <li><code>vexp &lt;file&gt;.h5</code> — opens the .h5 extract directly in vis_linescan_explorer; better when the PNG mask overlay obscures the FO.</li>
+            </ul>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>Reject any extract that contains:</strong> a missing FO (empty box), a cut-off FO, a tilted FO with reduced surface area, an FO inside a crevice, an O-ring inside the box, or two FOs in one box. To fix: go back to VIS REV, edit the box (or remove + re-click in the same place to force a rewrite), and re-run.</span>
+            </div>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><strong>Spreadsheet:</strong> tick <strong>VIS EXTRACT-PNG</strong> when extracts look clean; put your name in <strong>VIS EXTRACT-PNGer</strong>. Don't tick this until you've actually opened the files — this is the gate that protects the model.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">browse PNGs (vis camera)</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">eog /mnt/ppo-data-services/post-processing/annotation/2026-04-25/2104A1813/*.png</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">open one extract in vexp</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">vexp /mnt/ppo-data-services/post-processing/annotation/2026-04-25/2104A1813/&lt;extract&gt;.h5</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 7 — AK SPEC REV -->
+        <div class="timeline-step" id="test-step-7">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">7. SPEC REV <span style="font-weight:normal;color:var(--text-muted);font-size:0.9rem;">(also REVer · SPEC IGNORE)</span></span>
+              <span class="step-badge">revt --spec</span>
+            </div>
+            <p class="step-desc">Re-run <code>revt</code> with <code>--spec</code> on the same manifest. Same controls as VIS REV, but edits only affect the spec mask. Ideally no edits are needed — the coregistration from vis is usually accurate enough — but reject anything cut off or with the o-ring inside the box.</p>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><strong>Spreadsheet:</strong> tick <strong>SPEC REV</strong> and put your name in <strong>REVer</strong> (spec side). Right-clicks during this step populate <strong>SPEC IGNORE</strong> automatically. Always run AFTER VIS REV, never before.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">template — revt --spec</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">revt /mnt/ppo-data-services/post-processing/annotation/post_proc_info_&lt;#&gt;.txt --spec --make_extracts</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 8 — AM SPEC EXTRACT-PNG QC -->
+        <div class="timeline-step" id="test-step-8">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">8. SPEC EXTRACT-PNG <span style="font-weight:normal;color:var(--text-muted);font-size:0.9rem;">(also SPEC EXTRACT-PNGer)</span></span>
+              <span class="step-badge">eog / hexp</span>
+            </div>
+            <p class="step-desc">Same QC as VIS EXTRACT-PNG, but for the spec extracts. Note the path uses the <strong>spec camera serial</strong>, not the vis serial. Use <code>hexp</code> (the hyperspec sibling of <code>vexp</code>) for the .h5 files.</p>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>Same reject criteria as VIS EXTRACT-PNG:</strong> missing FO, cut-off, tilted, in a crevice, o-ring in box, double FO. To fix, edit in SPEC REV and re-run.</span>
+            </div>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><strong>Spreadsheet:</strong> tick <strong>SPEC EXTRACT-PNG</strong>, put your name in <strong>SPEC EXTRACT-PNGer</strong>.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">browse PNGs (spec camera)</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">eog /mnt/ppo-data-services/post-processing/annotation/2026-04-25/13480/*.png</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">open one extract in hexp</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">hexp /mnt/ppo-data-services/post-processing/annotation/2026-04-25/13480/&lt;extract&gt;.h5</div>
+            </div>
+          </div>
+        </div>
+
+<!-- STEP 9 — AH + AO UPLOAD (one awscp covers both) -->
+        <div class="timeline-step" id="test-step-9">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">9. UPLOAD <span style="font-weight:normal;color:var(--text-muted);font-size:0.9rem;">(VIS UPLOAD + SPEC UPLOAD; UPLOADer)</span></span>
+              <span class="step-badge">awscp</span>
+            </div>
+            <p class="step-desc">Run <code>awscp</code> (alias of <code>aws_copy.py</code>; same job as the older <code>copy3server.py</code>) on the manifest. <strong>One run uploads BOTH vis and spec</strong> — you don't run it twice. Then verify each side independently with <code>ls | wc -l</code> on the corrected directories.</p>
+            <div class="info-box">
+              <span class="info-icon">ℹ️</span>
+              <span class="info-text"><strong>Spreadsheet:</strong> tick <strong>VIS UPLOAD</strong> after the vis count check passes, and <strong>SPEC UPLOAD</strong> after the spec count check passes. Put your name in the <strong>UPLOADer</strong> dropdowns for each side. The two checkboxes exist for independent verification, not because you upload twice.</span>
+            </div>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>Use extra caution that any bad scans are not uploaded.</strong> Bad scans should have been right-clicked red during VIS REV / SPEC REV — those are excluded automatically. If you get a permissions error, the destination is mounted read-only: run <code>mount&lt;#&gt;w &lt;username&gt;</code> (needs rw permission) or escalate to Alan Rooks.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">awscp — uploads vis + spec together</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">awscp /mnt/ppo-data-services/post-processing/annotation/post_proc_info_&lt;#&gt;.txt</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">verify VIS count (for VIS UPLOAD)</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">ls /mnt/ppo-post-proc/&lt;PROJECT&gt;/fo/dm21040002_vis/2026-04-25/corrected | wc -l</div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">verify SPEC count (for SPEC UPLOAD)</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">ls /mnt/ppo-post-proc/&lt;PROJECT&gt;/fo/dm21040002_spec/2026-04-25/corrected | wc -l</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 10 — Redo (rare; most fixes happen inline at VIS REV / SPEC REV) -->
+        <div class="timeline-step" id="test-step-10">
+          <div class="step-dot"></div>
+          <div class="step-card">
+            <div class="step-header">
+              <span class="step-title">10. Redo (only if needed)</span>
+              <span class="step-badge">If a QC step fails</span>
+            </div>
+            <p class="step-desc">Most annotation fixes happen inline: re-run <code>revt … --make_extracts</code> at VIS REV or SPEC REV and edit the affected box (delete + re-click in the same place to force an extract rewrite). Use the <code>vroi --spec</code> command below <strong>only</strong> when the annotation's ROI selection itself needs to be redone for spec files.</p>
+            <div class="warning-box">
+              <span class="warn-icon">⚠️</span>
+              <span class="warn-text"><strong>Confirm you are using the Test (annotation) redo, not the Train (ROI) one.</strong> The annotation redo command includes <code>--spec</code>; the ROI redo on the Train tab does not. Using the wrong one overwrites the wrong files.</span>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-label">vroi — annotation redo (spec)</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <div class="code-content">vroi /mnt/ppo-data-services/post-processing/annotation/post_proc_info_&lt;#&gt;.txt --df passthrough --t --spec</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /timeline-test -->
+    </div><!-- /panel-test -->
+
+
+    <!-- ══════════════════════
+         REDO TAB
+    ══════════════════════ -->
+    <div class="tab-panel" id="panel-redo">
+
+      <div class="tab-intro">
+        <strong>Redo shortcut.</strong> Use this tab when you only need to re-do scans flagged blue during review and don't want to scroll through the full workflow. Train Redo and Test Redo use different commands — pick the section that matches the data you're correcting.
+      </div>
+
+      <!-- ── Train Redo ── -->
+      <div class="redo-section">
+        <div class="redo-section-title">🔵 Train (ROI) — Redo Steps</div>
+        <div class="timeline" id="timeline-redo-train">
+
+          <div class="timeline-step" id="redo-train-step-1">
+            <div class="step-dot"></div>
+            <div class="step-card">
+              <div class="step-header">
+                <span class="step-title">1. Connect &amp; activate environment</span>
+                <span class="step-badge">Train Redo</span>
+              </div>
+              <p class="step-desc">Connect via MobaX (<code>localhost:5902</code>, password <code>ppoadmin</code>) and activate the environment with <code>aa;caf</code>. Make sure the calibration server is mounted: <code>mount | grep PPO</code>.</p>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-label">activate &amp; verify mounts</span>
+                  <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <div class="code-content">aa;caf
+mount | grep PPO</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="timeline-step" id="redo-train-step-2">
+            <div class="step-dot"></div>
+            <div class="step-card">
+              <div class="step-header">
+                <span class="step-title">2. Run vroi on flagged scans</span>
+                <span class="step-badge">Train Redo</span>
+              </div>
+              <p class="step-desc">Run <code>vroi</code> on the same <code>post_proc_info_&lt;#&gt;.txt</code> from the original review. Only scans you marked blue in step 5 of the Train workflow will be opened.</p>
+              <div class="info-box">
+                <span class="info-icon">ℹ️</span>
+                <span class="info-text"><code>--df passthrough</code> reuses the existing dataframe. <code>--t</code> transforms the new vis ROI to the spec image automatically.</span>
+              </div>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-label">vroi — train redo</span>
+                  <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <div class="code-content">vroi /mnt/ppo-data-services/post-processing/roi/post_proc_info_&lt;#&gt;.txt --df passthrough --t</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="timeline-step" id="redo-train-step-3">
+            <div class="step-dot"></div>
+            <div class="step-card">
+              <div class="step-header">
+                <span class="step-title">3. Verify and upload</span>
+                <span class="step-badge">Train Redo</span>
+              </div>
+              <p class="step-desc">Open the regenerated PNGs and confirm the new ROIs look correct, then run <code>awscp</code> to upload. Confirm vis &amp; spec counts after upload.</p>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-label">view PNGs</span>
+                  <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <div class="code-content">cd /mnt/ppo-data-services/post-processing/roi/&lt;date&gt;/&lt;camera_serial&gt;
+ls
+eog *.png</div>
+              </div>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-label">upload</span>
+                  <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <div class="code-content">awscp /mnt/ppo-data-services/post-processing/roi/post_proc_info_&lt;#&gt;.txt</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── Test Redo ── -->
+      <div class="redo-section">
+        <div class="redo-section-title">🟣 Test (Annotation) — Redo Steps</div>
+        <div class="timeline" id="timeline-redo-test">
+
+          <div class="timeline-step" id="redo-test-step-1">
+            <div class="step-dot"></div>
+            <div class="step-card">
+              <div class="step-header">
+                <span class="step-title">1. Connect &amp; activate environment</span>
+                <span class="step-badge">Test Redo</span>
+              </div>
+              <p class="step-desc">Connect via MobaX and activate the environment with <code>aa;caf</code>.</p>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-label">activate environment</span>
+                  <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <div class="code-content">aa;caf</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="timeline-step" id="redo-test-step-2">
+            <div class="step-dot"></div>
+            <div class="step-card">
+              <div class="step-header">
+                <span class="step-title">2. Re-run revt OR vroi --spec</span>
+                <span class="step-badge">Test Redo</span>
+              </div>
+              <p class="step-desc"><strong>For most annotation fixes:</strong> just re-run <code>revt</code> with <code>--make_extracts</code>. Editing any annotation box deletes and replaces the bad extract. <strong>For ROI selection redos on spec:</strong> use the <code>vroi --df passthrough --t --spec</code> command.</p>
+              <div class="warning-box">
+                <span class="warn-icon">⚠️</span>
+                <span class="warn-text"><strong>Confirm you are using the TEST redo command (with <code>--spec</code>), not the Train one.</strong> Train redo points at the <code>roi</code> folder and omits <code>--spec</code> — using it on annotation files overwrites the wrong dataset.</span>
+              </div>
+              <div class="warning-box">
+                <span class="warn-icon">⚠️</span>
+                <span class="warn-text"><strong>If using <code>revt</code> to redo, <code>--make_extracts</code> is mandatory.</strong> Without it the extracts are not regenerated and your fix isn't propagated.</span>
+              </div>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-label">revt — re-review &amp; rewrite extracts</span>
+                  <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <div class="code-content">revt /mnt/ppo-data-services/post-processing/annotation/post_proc_info_&lt;#&gt;.txt --make_extracts</div>
+              </div>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-label">vroi — annotation spec redo</span>
+                  <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <div class="code-content">vroi /mnt/ppo-data-services/post-processing/annotation/post_proc_info_&lt;#&gt;.txt --df passthrough --t --spec</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="timeline-step" id="redo-test-step-3">
+            <div class="step-dot"></div>
+            <div class="step-card">
+              <div class="step-header">
+                <span class="step-title">3. Verify extracts and upload</span>
+                <span class="step-badge">Test Redo</span>
+              </div>
+              <p class="step-desc">Open the regenerated extracts in <code>vexp</code> / <code>hexp</code> to confirm the fix looks correct, then upload with <code>awscp</code>.</p>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-label">view extract</span>
+                  <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <div class="code-content">vexp /mnt/ppo-data-services/post-processing/annotation/&lt;date&gt;/&lt;camera_serial&gt;/&lt;file&gt;.h5</div>
+              </div>
+              <div class="code-block">
+                <div class="code-header">
+                  <span class="code-label">upload</span>
+                  <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <div class="code-content">awscp /mnt/ppo-data-services/post-processing/annotation/post_proc_info_&lt;#&gt;.txt</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div><!-- /panel-redo -->
+
+  </div><!-- /content-area -->
+</div><!-- /main-layout -->
+
+
+<!-- ════ CHATBOT ════ -->
+<button class="chatbot-toggle" onclick="toggleChat()" title="Help &amp; FAQ">💬</button>
+
+<div class="chatbot-panel" id="chatPanel">
+  <div class="chat-header">
+    🤖 Post Processing Assistant
+    <p>Ask a question or pick a topic below</p>
+  </div>
+  <div class="chat-messages" id="chatMessages">
+    <div class="chat-msg bot">Hello! I can help with navigation, process questions, and common errors. Type a question or tap a suggestion below.</div>
+  </div>
+  <div class="chat-suggestions" id="chatSuggestions">
+    <span class="suggestion-chip" onclick="askFAQ('make_extracts')">What is --make_extracts?</span>
+    <span class="suggestion-chip" onclick="askFAQ('train_vs_test')">Train vs Test (t3st)?</span>
+    <span class="suggestion-chip" onclick="askFAQ('aa_caf')">No module named 'cv2'</span>
+    <span class="suggestion-chip" onclick="askFAQ('tmux')">Display / qxcb error</span>
+    <span class="suggestion-chip" onclick="askFAQ('terminate')">When do I terminate?</span>
+    <span class="suggestion-chip" onclick="askFAQ('data_prep')">What is DATA PREP?</span>
+    <span class="suggestion-chip" onclick="askFAQ('extract_qc')">VIS EXTRACT-PNG?</span>
+  </div>
+  <div class="chat-input-area">
+    <input class="chat-input" id="chatInput" type="text" placeholder="Type your question..." onkeydown="if(event.key==='Enter') sendChat()" />
+    <button class="chat-send" onclick="sendChat()">Send</button>
+  </div>
+</div>
+
+
+<!-- ════ WARNING SNIPPET MODAL ════ -->
+<button class="snippet-btn" onclick="openSnippet()">⚠️ Warning Snippet</button>
+
+<div class="modal-overlay" id="snippetModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeSnippet()">✕</button>
+    <h3>⚠️ Warning Box — Copy &amp; Paste Template</h3>
+    <p>Copy the HTML below and paste it anywhere inside a <code>&lt;div class="step-card"&gt;</code> block in this file. Replace the text inside <code>&lt;span class="warn-text"&gt;</code> with your custom warning message.</p>
+    <div class="snippet-preview">
+      <div class="code-header">
+        <span class="code-label" style="font-family:'Courier New',monospace;font-size:0.74rem;color:var(--ashy);">warning-box template</span>
+        <button class="copy-btn" onclick="copySnippet(this)">Copy</button>
+      </div>
+      <pre id="snippetCode">&lt;div class="warning-box"&gt;
+  &lt;span class="warn-icon"&gt;⚠️&lt;/span&gt;
+  &lt;span class="warn-text"&gt;
+    &lt;strong&gt;YOUR WARNING HEADING HERE.&lt;/strong&gt;
+    Explanation of what will go wrong if this is missed.
+  &lt;/span&gt;
+&lt;/div&gt;</pre>
+    </div>
+    <p class="modal-note">
+      <strong>Where to place it:</strong> Paste it inside any <code>.step-card</code> div, after the <code>.step-desc</code> paragraph and before the <code>.code-block</code> div.<br/><br/>
+      <strong>Tip:</strong> You can add multiple warning boxes to a single step — just paste the snippet more than once. There is also a blue <code>info-box</code> variant: replace <code>warning-box</code> with <code>info-box</code> and <code>warn-icon</code>/<code>warn-text</code> with <code>info-icon</code>/<code>info-text</code>, and use ℹ️ as the icon.
+    </p>
+  </div>
+</div>
+
+
+<script>
+/* ════════════════════════════════════
+   FAQ DATABASE
+   Edit these entries to customise chatbot answers.
+   Each entry has:
+     keys   — words/phrases that trigger this answer
+     answer — the response shown to the user
+   Category is shown for grouping only.
+════════════════════════════════════ */
+const FAQ = [
+
+  /* ── Technical Errors ── */
+  {
+    category: "Technical Errors",
+    keys: ["no module","cv2","modulenotfounderror","aa;caf","aacaf","aa caf","import error","forgot env","not in full"],
+    answer: "You forgot to type aa;caf in the terminal before starting work. This activates the (full) environment that contains cv2 and the post-processing tools. Run aa;caf and try again. The prompt should change to (full). If you are already in (full) and still see this error, escalate — that situation has not happened before."
+  },
+  {
+    category: "Technical Errors",
+    keys: ["display","localhost","qxcb","qxcbconnection","x display","not opening","review_tool","no window","tmux","tmux issue"],
+    answer: "Could-not-connect-to-display / qxcbconnection / review_tool not opening — these are tmux problems. Detach with Ctrl+B then D, kill the tmux, re-make it, and try again. Cause is usually a tmux session left open on two computers (e.g. office + home). If a fresh tmux still fails, escalate."
+  },
+  {
+    category: "Technical Errors",
+    keys: ["mobax","moba","ssh","won't connect","cannot connect","won't open","port 5902"],
+    answer: "If MobaXterm won't connect: (1) confirm the launcher (Downloads\\ds-ec2-launcher.cmd) finished and the instance is running, (2) connect to localhost port 5902, (3) password is ppoadmin. If you can connect to MobaX but ls in /mnt/ppo-server# shows no directories, the server is unmounted — see the 'server unmounted' answer."
+  },
+  {
+    category: "Technical Errors",
+    keys: ["server unmounted","unmounted","no directories","ppo-server","mount","mount#","mount#w","read only","read/write","rw"],
+    answer: "If a server is unmounted, run mount<#> with password ppoadmin to mount it read-only. To get read/write (needed for upload), run mount<#>w <username> — only works if you have rw permission. To check the current mount state: mount | grep PPO. If you don't have rw permission, message Alan Rooks in software."
+  },
+  {
+    category: "Technical Errors",
+    keys: ["sweeper","sweeper path","cal_vis","calibration","calibrations","does not appear to exist","load calibrations"],
+    answer: "Sweeper Path / cal_vis / 'Trying to load calibrations from path' errors mean either: (1) calibrations have not been generated yet — escalate to software (Barrett); (2) you are in the wrong folder — prep should run from the vis folder, not the spec folder; or (3) the calibration server is unmounted — run mount | grep PPO and remount with mount<#> if missing."
+  },
+  {
+    category: "Technical Errors",
+    keys: ["no such file","not found","file not found","path error","script not found","command not found"],
+    answer: "No Such File or Directory: (1) On upload — the .txt is looking for .h5s that have been moved or already uploaded. If only spec files are missing, recovery is possible (see Common PP Errors → Advanced Solutions). If vis files are missing, the set must be re-prepped. (2) On prep — likely a typo. Verify with: ls run*/[t3st/train]*<material>*.h5 | wc -l."
+  },
+  {
+    category: "Technical Errors",
+    keys: ["cannot find","no t3st","no train","no t3st files","no train files","frame files","not renamed","still named frame"],
+    answer: "If a count check returns 0 and you see only frame*.h5 files in the run folders, software has not yet renamed them to t3st* / train*. This is on the software team — be patient and post-process a different day in the meantime. If you know they should be renamed, ping software to verify."
+  },
+  {
+    category: "Technical Errors",
+    keys: ["timeout","timed out","disconnected","dropped","connection lost"],
+    answer: "If your connection times out: re-run the launcher and reconnect MobaX to localhost:5902. Check the AWS launcher window is still alive. Resume from the last completed step — don't restart from scratch unless instructed."
+  },
+  {
+    category: "Technical Errors",
+    keys: ["permission denied","access denied","permission error","not authorised","not authorized","read-only","upload error"],
+    answer: "Permission denied on upload almost always means the destination server is mounted read-only. Run mount | grep PPO to check — you want 'rw'. To remount as read/write: mount<#>w <username>. If you don't have rw permission yet, ask Alan Rooks (software) to grant it."
+  },
+
+  /* ── Process Questions ── */
+  {
+    category: "Process Questions",
+    keys: ["train vs test","train or test","which tab","scan_mode","train vs t3st","t3st vs train","difference"],
+    answer: "Train scans (testplan.scan_mode=train) go through the ROI workflow → output to /post-processing/roi/. Use the Train tab. Test scans (testplan.scan_mode=t3st — note the spelling) go through the Annotation workflow → output to /post-processing/annotation/, and require --make_extracts. Use the Test tab. The Date Page in the spreadsheet shows the Type column for each scan."
+  },
+  {
+    category: "Process Questions",
+    keys: ["t3st spelling","why t3st","spelling","t3st"],
+    answer: "Yes, the metadata literally uses 't3st' with a 3, not 'test'. If you filter on 'test' the count will be zero. This is a metadata convention — match it exactly in --filter testplan.scan_mode t3st."
+  },
+  {
+    category: "Process Questions",
+    keys: ["order","steps in order","sequence","what order","step by step","which step first"],
+    answer: "Order for both Train and Test: (1) Launch instance → (2) Connect via MobaX + aa;caf → (3) Verify file count → (4) Run pproc → (5) Run revt to review (vis, then --spec) → (6) Redo flagged scans (only if needed) → (7) Upload with awscp. Train uses /roi/ paths, Test uses /annotation/ paths and --make_extracts."
+  },
+  {
+    category: "Process Questions",
+    keys: ["make_extracts","what is --make_extracts","why make_extracts","extracts flag","--make_extracts"],
+    answer: "--make_extracts is required on the annotation review (Test tab, step 5) and on annotation re-reviews. It tells revt to write the actual extract .h5 files (split into validation and test sets) that get used downstream. Without it, your annotation edits are saved to the masks but no extracts are produced — so the data effectively never reaches the model. ROI review (Train tab) does not need this flag."
+  },
+  {
+    category: "Process Questions",
+    keys: ["redo","when to redo","should i redo","do i redo","need to redo","redo step","when do i redo"],
+    answer: "Redo only the scans you (or the reviewer) marked blue during the review step. Don't redo as a precaution. For ROI: rerun vroi --df passthrough --t. For Annotation: usually just re-run revt --make_extracts and edit the affected box (delete + re-click in the same place to trigger an extract rewrite). Use vroi --df passthrough --t --spec only when the ROI selection itself needs redoing on spec."
+  },
+  {
+    category: "Process Questions",
+    keys: ["prep data","what is prep","prep step","data prep","preparing","check count","wc -l"],
+    answer: "Prep Data has two parts: (1) verify the file count with dl ls ... | wc -l — must match the spreadsheet; (2) run pproc to generate masks/extracts/manifests. Always do the count check first to catch material-name typos, missing renames, or wrong dm/date before you waste time on a long pproc run."
+  },
+  {
+    category: "Process Questions",
+    keys: ["how long","time","duration","takes long","wait","stuck"],
+    answer: "Times vary by dataset size. Prep checks are seconds; pproc per material per dm per date can take many minutes. If a script appears stuck for over ~15 minutes with no output, check whether the calibration server is mounted and whether you're cd'ed into an S3 bucket (which slows everything dramatically). If still stuck, escalate."
+  },
+  {
+    category: "Process Questions",
+    keys: ["review","what is review","review step","checking","check output","revt","review_tool"],
+    answer: "Review uses revt (review_tool_aws.py) on the post_proc_info_<#>.txt manifest. Annotations: left-click adds/removes a red box. ROIs: left-click highlights blue (mark for redo), right-click highlights red (mark un-usable). Press q to save and exit, or ! to exit without saving. Always do a vis pass first, then a --spec pass."
+  },
+  {
+    category: "Process Questions",
+    keys: ["upload","awscp","aws_copy","how to upload","upload step","upload server"],
+    answer: "Run awscp <txt-file> on the post_proc_info_<#>.txt manifest. The destination is encoded in the .txt. Verify counts after: cd to /mnt/ppo-post-proc/.../<date>/corrected and run ls | wc -l for both vis and spec. Make sure no bad scans were uploaded — those should have been marked red in review and excluded automatically. Then update the VIS/SPEC UPLOAD checkbox on the spreadsheet."
+  },
+  {
+    category: "Process Questions",
+    keys: ["terminate","shut down","end of day","stop instance","close instance","quit instance"],
+    answer: "ALWAYS terminate the AWS instance at the end of every day. Go to the launcher window, press q to quit, then 1 to confirm. Anything not in an S3 bucket (/mnt/<bucket>) or your persistent volume (~/volume/<volume>) will be deleted on termination. Idle instances cost money."
+  },
+  {
+    category: "Process Questions",
+    keys: ["spreadsheet","date page","ppe column","pper","rever","uploader","vis/spec pp","vis/spec rev","vis/spec upload"],
+    answer: "Use the Date Page on the PP spreadsheet. VIS/SPEC PP = post-processed checkbox; VIS/SPEC REV = reviewed checkbox; VIS/SPEC UPLOAD = uploaded checkbox. Pick scans whose VIS/SPEC PP is unchecked and put your name in the PPer dropdown so you don't double-up with someone else. Mark the checkbox once your step is done. If a scan can't be processed, leave a note in the comments column."
+  },
+
+  /* ── Quality Reminders ── */
+  {
+    category: "Quality Reminders",
+    keys: ["quality","extract quality","bad extract","good extract","reject","missing fo","cut off","tilted","crevice","double fo","o-ring"],
+    answer: "Reject an annotation extract if the box: contains no FO, has the FO cut off, has the FO tilted (smaller surface area than expected), shows the FO inside a crevice, includes the green o-ring, or contains two FOs. Acceptable: FO centred OR off-centre, as long as it's not cut off and the surface area looks right."
+  },
+  {
+    category: "Quality Reminders",
+    keys: ["roi quality","bad roi","good roi","belt","not enough data","clearance","ac tag","--ac"],
+    answer: "Reject an ROI if it contains belt or other (non-target) FOs. Reject if there's too much clearance between the ROI box (yellow) and the ROI square (green) — that loses data. For density ROIs, meat background is OK as long as FO density is uniform. Don't forget the --ac tag for spec annotations where required."
+  },
+  {
+    category: "Quality Reminders",
+    keys: ["s3","cd s3","slowdown","slow","navigating","s3 bucket"],
+    answer: "Don't cd into S3 buckets (/mnt/ppo-experimental-data, /mnt/ppo-post-proc, etc.). Every command run while cd'ed in becomes much slower. Use full paths from your home directory: ls /mnt/ppo-data-services/post-processing instead of cd'ing first. Tab completion still works on full paths."
+  },
+
+  /* ── Navigation Help ── */
+  {
+    category: "Navigation Help",
+    keys: ["find annotation","where is annotation","annotation step","go to annotation"],
+    answer: "Annotation processing is the Test (t3st) tab. The pproc step is #4 and the revt --make_extracts review step is #5. Use the side nav on the left to jump."
+  },
+  {
+    category: "Navigation Help",
+    keys: ["redo tab","where is redo","find redo","redo section","shortcut"],
+    answer: "The Redo tab is the third tab at the top. It splits into Train Redo (vroi on /roi/) and Test Redo (revt or vroi --spec on /annotation/) so you can jump straight in without scrolling through the full Train or Test workflow."
+  },
+  {
+    category: "Navigation Help",
+    keys: ["switch tab","change tab","go to train","go to test","how to switch"],
+    answer: "Use the tabs at the top — Train (ROI), Test (Annotation), and Redo. The side navigation panel on the left rebuilds itself for whichever tab is active."
+  },
+  {
+    category: "Navigation Help",
+    keys: ["copy","how to copy","copy command","copy button","copy code"],
+    answer: "Each code block has a Copy button on the top right. Click it to copy the command to your clipboard, then paste into MobaXterm. The button briefly turns green to confirm."
+  },
+  {
+    category: "Navigation Help",
+    keys: ["side nav","navigation","jump to","nav panel","left panel","sidebar"],
+    answer: "The left panel lists every step on the current tab. Click a step name to jump to it on the page — the step gets a purple glow so it's easy to find."
+  },
+  {
+    category: "Navigation Help",
+    keys: ["warning","add warning","custom warning","new warning","warning snippet","snippet"],
+    answer: "Click the ⚠️ Warning Snippet button at the bottom-right. It shows ready-made HTML you can copy and paste inside any step card. There is also an info-box variant for blue informational notes (use ℹ️ as the icon)."
+  },
+  {
+    category: "Navigation Help",
+    keys: ["chatbot","this chat","faq","help","what can you do","questions"],
+    answer: "I can help with: navigation (finding steps), process questions (workflow order, --make_extracts, terminate, upload), technical errors (cv2 / tmux / mount / sweeper / no-such-file), spreadsheet column lookups by header name (DATA PREP, VIS REV, VIS EXTRACT-PNG, etc.), and quality reminders. Type a question or tap a suggestion."
+  },
+
+  /* ── Spreadsheet & Commands ── per-column lookups (header names) ── */
+  {
+    category: "Spreadsheet & Commands",
+    keys: ["DATA PREP","data prep column","data prepper","what is data prep","data prep step","pproc step"],
+    answer: "DATA PREP — run pproc on the raw files to generate masks, extracts, and the post_proc_info_<#>.txt manifest. DATA PREPer is the dropdown for the person doing this step. Use the train pproc command on the Train tab if scan_mode=train; use the t3st pproc command on the Test tab if scan_mode=t3st."
+  },
+  {
+    category: "Spreadsheet & Commands",
+    keys: ["VIS REV","vis review","vis rev step","what is vis rev"],
+    answer: "VIS REV — run revt on the manifest from the DATA PREP step. Annotation: left-click adds/removes a red box, include --make_extracts. ROI: left-click highlights blue (mark for redo), right-click highlights red (un-usable). Press q to save, ! to discard. The REVer column is the reviewer's name. Always run BEFORE SPEC REV."
+  },
+  {
+    category: "Spreadsheet & Commands",
+    keys: ["VIS EXTRACT-PNG","vis extract png","extract png","extract qc","extract-png","vis extract-pnger","what is vis extract"],
+    answer: "VIS EXTRACT-PNG — open the generated PNGs and the extract .h5 files to confirm quality. Run eog *.png in /mnt/ppo-data-services/post-processing/<roi or annotation>/<date>/<camera_serial>/, or open .h5 files in vexp. Reject if FO is missing, cut off, tilted, in a crevice, contains an o-ring, or has 2 FOs in one box. VIS EXTRACT-PNGer is your name. This is a SEPARATE step from VIS REV — review = clicking through masks; extract QC = looking at the actual output."
+  },
+  {
+    category: "Spreadsheet & Commands",
+    keys: ["VIS UPLOAD","vis upload","UPLOADer","upload column","vis upload column"],
+    answer: "VIS UPLOAD — run awscp on the manifest. Important: a single awscp run uploads BOTH vis and spec at once. The separate VIS UPLOAD / SPEC UPLOAD checkboxes track that each side has been VERIFIED post-upload (cd to /mnt/ppo-post-proc/<PROJECT>/fo/<dm#>_vis/<date>/corrected then ls | wc -l, repeat for the _spec dir). UPLOADer is your name."
+  },
+  {
+    category: "Spreadsheet & Commands",
+    keys: ["VIS IGNORE","vis ignore","ignore vis","do not upload vis","skip vis","red vis"],
+    answer: "VIS IGNORE — flags a vis scan as un-usable. Source: any scan you right-clicked RED during VIS REV ends up here automatically. Don't upload these. There is no name dropdown — the flag is set during the review step itself."
+  },
+  {
+    category: "Spreadsheet & Commands",
+    keys: ["SPEC REV","spec review","spec rever","what is spec rev"],
+    answer: "SPEC REV — re-run revt with --spec (and --make_extracts for annotation). Sanity-check that the spec masks line up with vis. Ideally no edits are needed; only fix if a mask is cut off or contains an o-ring. REVer is your name. Run AFTER VIS REV, not before."
+  },
+  {
+    category: "Spreadsheet & Commands",
+    keys: ["SPEC EXTRACT-PNG","spec extract png","spec extract qc","spec extract-png","spec extract-pnger","hexp","hyperspec linescan"],
+    answer: "SPEC EXTRACT-PNG — same QC criteria as VIS EXTRACT-PNG, but for spec. Open PNGs with eog *.png, or open the .h5 extracts in hexp (hyperspec linescan explorer; same tool family as vexp). Reject for the same reasons: missing/cut-off/tilted FO, o-ring inside the box, double FO. SPEC EXTRACT-PNGer is your name."
+  },
+  {
+    category: "Spreadsheet & Commands",
+    keys: ["SPEC UPLOAD","spec upload","spec upload column"],
+    answer: "SPEC UPLOAD — verification checkbox for the spec side of awscp. As with VIS UPLOAD, one awscp run pushes BOTH vis and spec. Confirm with ls | wc -l in the _spec corrected directory and verify the count matches what you expect. UPLOADer is your name."
+  },
+  {
+    category: "Spreadsheet & Commands",
+    keys: ["SPEC IGNORE","spec ignore","ignore spec","do not upload spec","skip spec","red spec"],
+    answer: "SPEC IGNORE — flags a spec scan as un-usable. Source: any scan you right-clicked RED during SPEC REV. Set during the spec review step itself; no separate name dropdown."
+  },
+  {
+    category: "Spreadsheet & Commands",
+    keys: ["extract qc separate","why two extract steps","extract vs review","review vs extract","is extract a step","why extract png","extract png step","do i need to look at pngs"],
+    answer: "EXTRACT-PNG QC is a SEPARATE step from review. Review (VIS REV / SPEC REV) = clicking through masks in revt. Extract QC (VIS EXTRACT-PNG / SPEC EXTRACT-PNG) = looking at the actual output PNGs or .h5 extracts (eog or vexp/hexp) to confirm what gets sent to the model. The Quality Reminders criteria — missing FO, cut-off, tilted, crevice, double FO, o-ring in box — apply HERE, not at review. Don't tick the EXTRACT-PNG checkbox until you've actually opened the files."
+  },
+  {
+    category: "Spreadsheet & Commands",
+    keys: ["awscp uploads both","one upload","two upload checkboxes","why two uploads","vis and spec upload","upload twice","copy3server","copy3server.py","aws_copy"],
+    answer: "awscp (alias for aws_copy.py — also called copy3server.py in older notes) uploads vis AND spec in a single run. The spreadsheet has separate VIS UPLOAD and SPEC UPLOAD checkboxes only because each side gets verified separately post-upload — not because you run two uploads. Verify each side with: ls /mnt/ppo-post-proc/<PROJECT>/fo/<dm#>_vis/<date>/corrected | wc -l, then the same on the _spec dir."
+  }
+];
+
+
+/* ════════════════════════════════════
+   NAV CONFIG — defines side nav items per tab
+════════════════════════════════════ */
+const NAV_CONFIG = {
+  train: [
+    { id: 'train-step-1',  num: '1',   label: 'Launch Instance' },
+    { id: 'train-step-2',  num: '2',   label: 'MobaX + aa;caf' },
+    { id: 'train-step-3',  num: '3',   label: 'Pre-flight count' },
+    { id: 'train-step-4',  num: '4',   label: 'DATA PREP',         sub: 'pproc · find manifest' },
+    { id: 'train-step-5',  num: '5',   label: 'VIS REV',           sub: 'revt' },
+    { id: 'train-step-6',  num: '6',   label: 'VIS EXTRACT-PNG',   sub: 'eog / vexp' },
+    { id: 'train-step-7',  num: '7',   label: 'SPEC REV',          sub: 'revt --spec' },
+    { id: 'train-step-8',  num: '8',   label: 'SPEC EXTRACT-PNG',  sub: 'eog / hexp' },
+    { id: 'train-step-9',  num: '9',   label: 'UPLOAD',            sub: 'awscp · vis + spec' },
+    { id: 'train-step-10', num: '!',   label: 'Redo',              sub: 'vroi · if needed' }
+  ],
+  test: [
+    { id: 'test-step-1',  num: '1',   label: 'Launch Instance' },
+    { id: 'test-step-2',  num: '2',   label: 'MobaX + aa;caf' },
+    { id: 'test-step-3',  num: '3',   label: 'Pre-flight count' },
+    { id: 'test-step-4',  num: '4',   label: 'DATA PREP',         sub: 'pproc · find manifest' },
+    { id: 'test-step-5',  num: '5',   label: 'VIS REV',           sub: 'revt --make_extracts' },
+    { id: 'test-step-6',  num: '6',   label: 'VIS EXTRACT-PNG',   sub: 'eog / vexp' },
+    { id: 'test-step-7',  num: '7',   label: 'SPEC REV',          sub: 'revt --spec' },
+    { id: 'test-step-8',  num: '8',   label: 'SPEC EXTRACT-PNG',  sub: 'eog / hexp' },
+    { id: 'test-step-9',  num: '9',   label: 'UPLOAD',            sub: 'awscp · vis + spec' },
+    { id: 'test-step-10', num: '!',   label: 'Redo',              sub: 'rare · vroi --spec' }
+  ],
+  redo: [
+    { id: 'redo-train-step-1', num: '🔵', label: 'Train: Connect' },
+    { id: 'redo-train-step-2', num: '🔵', label: 'Train: Run vroi' },
+    { id: 'redo-train-step-3', num: '🔵', label: 'Train: Verify & Upload' },
+    { id: 'redo-test-step-1',  num: '🟣', label: 'Test: Connect' },
+    { id: 'redo-test-step-2',  num: '🟣', label: 'Test: revt or vroi' },
+    { id: 'redo-test-step-3',  num: '🟣', label: 'Test: Verify & Upload' }
+  ]
+};
+
+let currentTab = 'train';
+
+/* ── Build side nav for given tab ── */
+function buildNav(tab) {
+  const nav = document.getElementById('sideNav');
+  nav.innerHTML = '<div class="side-nav-title">Jump to Step</div>';
+  (NAV_CONFIG[tab] || []).forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'nav-item';
+    div.id = 'nav-' + item.id;
+    div.innerHTML = `<div class="nav-num">${item.num}</div>
+      <div><div>${item.label}</div>${item.sub ? `<div class="nav-sub">${item.sub}</div>` : ''}</div>`;
+    div.onclick = () => jumpToStep(item.id);
+    nav.appendChild(div);
+  });
+}
+
+/* ── Switch tab ── */
+function switchTab(tab, btn) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + tab).classList.add('active');
+  buildNav(tab);
+  // clear highlights
+  document.querySelectorAll('.timeline-step').forEach(s => s.classList.remove('highlighted'));
+  // scroll content area to top
+  document.getElementById('contentArea').scrollTop = 0;
+}
+
+/* ── Jump to step ── */
+function jumpToStep(stepId) {
+  document.querySelectorAll('.timeline-step').forEach(s => s.classList.remove('highlighted'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+  const step = document.getElementById(stepId);
+  if (step) {
+    step.classList.add('highlighted');
+    step.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  const navItem = document.getElementById('nav-' + stepId);
+  if (navItem) navItem.classList.add('active');
+}
+
+/* ── Clipboard helper — works on file:// and https:// ── */
+function copyToClipboard(text) {
+  // Try the modern API first (https / localhost)
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+  // Fallback for file:// — use a hidden textarea + execCommand
+  return new Promise((resolve, reject) => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-9999px';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    ok ? resolve() : reject(new Error('execCommand copy failed'));
+  });
+}
+
+function showCopied(btn, ok) {
+  if (ok) {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+  } else {
+    btn.textContent = 'Press Ctrl+C';
+    btn.classList.add('copied');
+  }
+  setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+}
+
+/* ── Copy code button ── */
+function copyCode(btn) {
+  const code = btn.closest('.code-block').querySelector('.code-content').textContent.trim();
+  copyToClipboard(code)
+    .then(() => showCopied(btn, true))
+    .catch(() => {
+      // Last-resort: select the text in place so the user can Ctrl+C
+      const node = btn.closest('.code-block').querySelector('.code-content');
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      showCopied(btn, false);
+    });
+}
+
+/* ════════════════════════════════════
+   CHATBOT LOGIC
+════════════════════════════════════ */
+function toggleChat() {
+  const panel = document.getElementById('chatPanel');
+  panel.classList.toggle('open');
+}
+
+function askFAQ(key) {
+  const map = {
+    make_extracts: 'what is --make_extracts',
+    train_vs_test: 'train vs test t3st difference',
+    aa_caf:        "no module named cv2 aa;caf",
+    tmux:          "could not connect to display qxcb tmux",
+    terminate:     "when do I terminate the instance",
+    data_prep:     "what is DATA PREP step pproc",
+    extract_qc:    "VIS EXTRACT-PNG extract qc step"
+  };
+  document.getElementById('chatInput').value = map[key] || key;
+  sendChat();
+}
+
+function sendChat() {
+  const input = document.getElementById('chatInput');
+  const query = input.value.trim();
+  if (!query) return;
+  input.value = '';
+
+  addMsg(query, 'user');
+  const answer = getFAQAnswer(query);
+  setTimeout(() => addMsg(answer, 'bot'), 280);
+}
+
+function addMsg(text, role) {
+  const box = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + role;
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function getFAQAnswer(query) {
+  const q = query.toLowerCase();
+  let best = null, bestScore = 0;
+
+  for (const entry of FAQ) {
+    let score = 0;
+    for (const key of entry.keys) {
+      if (q.includes(key.toLowerCase())) score += key.length;
+    }
+    if (score > bestScore) { bestScore = score; best = entry; }
+  }
+
+  if (best && bestScore > 0) return best.answer;
+  return "I'm not sure about that one. Try rephrasing your question, or check the step cards for more detail. You can also ask your team lead — and consider adding the issue to the Common PP Errors wiki so the next person finds it here.";
+}
+
+/* ════════════════════════════════════
+   WARNING SNIPPET MODAL
+════════════════════════════════════ */
+function openSnippet()  { document.getElementById('snippetModal').classList.add('open'); }
+function closeSnippet() { document.getElementById('snippetModal').classList.remove('open'); }
+
+function copySnippet(btn) {
+  const code = document.getElementById('snippetCode').textContent.trim();
+  copyToClipboard(code)
+    .then(() => showCopied(btn, true))
+    .catch(() => {
+      const node = document.getElementById('snippetCode');
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      showCopied(btn, false);
+    });
+}
+
+// close modal on overlay click
+document.getElementById('snippetModal').addEventListener('click', function(e) {
+  if (e.target === this) closeSnippet();
+});
+
+// ESC closes modal or chatbot
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeSnippet();
+    document.getElementById('chatPanel').classList.remove('open');
+  }
+});
+
+/* ── Init nav on load ── */
+buildNav('train');
+</script>
+</body>
+</html>
